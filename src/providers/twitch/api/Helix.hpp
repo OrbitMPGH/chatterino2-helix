@@ -329,6 +329,21 @@ enum class HelixUpdateUserChatColorError {
     Forwarded,
 };
 
+enum class HelixVipUserError {
+    Unknown,
+    UserMissingScope,
+
+    // User is a moderator or already VIP
+    UnprocessableEntity,
+
+    // No available VIP slots.
+    // Read more here: https://help.twitch.tv/s/article/Managing-Roles-for-your-Channel?language=en_US#types
+    NoSlotsAvailable,
+
+    // The error message is forwarded directly from the Twitch API
+    Forwarded,
+};
+
 class IHelix
 {
 public:
@@ -458,6 +473,11 @@ public:
         FailureCallback<HelixUpdateUserChatColorError, QString>
             failureCallback) = 0;
 
+    // https://dev.twitch.tv/docs/api/reference#add-channel-vip
+    virtual void vipUser(
+        QString userId, QString broadcasterId, ResultCallback<> successCallback,
+        FailureCallback<HelixVipUserError, QString> failureCallback) = 0;
+
     virtual void update(QString clientId, QString oauthToken) = 0;
 };
 
@@ -579,6 +599,11 @@ public:
         QString userID, QString color, ResultCallback<> successCallback,
         FailureCallback<HelixUpdateUserChatColorError, QString> failureCallback)
         final;
+
+    // https://dev.twitch.tv/docs/api/reference#add-channel-vip
+    void vipUser(
+        QString userId, QString broadcasterId, ResultCallback<> successCallback,
+        FailureCallback<HelixVipUserError, QString> failureCallback) final;
 
     void update(QString clientId, QString oauthToken) final;
 

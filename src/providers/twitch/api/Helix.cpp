@@ -843,6 +843,75 @@ void Helix::updateUserChatColor(
         .execute();
 };
 
+void Helix::vipUser(QString userId, QString broadcasterId,
+                    ResultCallback<> successCallback,
+                    FailureCallback<HelixVipUserError, QString> failureCallback)
+{
+    using Error = HelixVipUserError;
+
+    QJsonObject payload;
+
+    payload.insert("user_id", QJsonValue(userId));
+    payload.insert("broadcaster_id", QJsonValue(broadcasterId));
+
+    this->makeRequest("channels/vips", QUrlQuery())
+        .type(NetworkRequestType::Post)
+        .header("Content-Type", "application/json")
+        .payload(QJsonDocument(payload).toJson(QJsonDocument::Compact))
+        .onSuccess([successCallback, failureCallback](auto result) -> Outcome {
+            auto obj = result.parseJson();
+            if (result.status() != 204)
+            {
+                qCWarning(chatterinoTwitch)
+                    << "Success result for adding VIP user was"
+                    << result.status() << "but we only expected it to be 204";
+            }
+
+            successCallback();
+            return Success;
+        })
+        .onError([failureCallback](auto result) {
+            auto obj = result.parseJson();
+            auto message = obj.value("message").toString();
+
+            switch (result.status())
+            {
+                case 401: {
+                    if (message.startsWith("Missing scope",
+                                           Qt::CaseInsensitive))
+                    {
+                        // Handle this error specifically because its API error is especially unfriendly
+                        failureCallback(Error::UserMissingScope, message);
+                    }
+                    else
+                    {
+                        failureCallback(Error::Forwarded, message);
+                    }
+                }
+                break;
+
+                case 409: {
+                    failureCallback(Error::NoSlotsAvailable, message);
+                }
+                break;
+
+                case 422: {
+                    failureCallback(Error::UnprocessableEntity, message);
+                }
+                break;
+
+                default: {
+                    qCDebug(chatterinoTwitch)
+                        << "Unhandled error adding VIP:" << result.status()
+                        << result.getData() << obj;
+                    failureCallback(Error::Unknown, message);
+                }
+                break;
+            }
+        })
+        .execute();
+}
+
 NetworkRequest Helix::makeRequest(QString url, QUrlQuery urlQuery)
 {
     assert(!url.startsWith("/"));

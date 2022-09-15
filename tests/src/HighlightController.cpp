@@ -217,6 +217,12 @@ public:
                       failureCallback)),
                 (override));
 
+    MOCK_METHOD(void, vipUser,
+                (QString userId, QString broadcastId,
+                 ResultCallback<> successCallback,
+                 (FailureCallback<HelixVipUserError, QString> failureCallback)),
+                (override));
+
     MOCK_METHOD(void, update, (QString clientId, QString oauthToken),
                 (override));
 };
