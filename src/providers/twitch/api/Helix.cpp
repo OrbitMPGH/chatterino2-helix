@@ -851,8 +851,8 @@ void Helix::vipUser(QString userId, QString broadcasterId,
 
     QJsonObject payload;
 
-    payload.insert("user_id", QJsonValue(userId));
     payload.insert("broadcaster_id", QJsonValue(broadcasterId));
+    payload.insert("user_id", QJsonValue(userId));
 
     this->makeRequest("channels/vips", QUrlQuery())
         .type(NetworkRequestType::Post)
@@ -896,14 +896,81 @@ void Helix::vipUser(QString userId, QString broadcasterId,
                 break;
 
                 case 422: {
-                    failureCallback(Error::UnprocessableEntity, message);
+                    failureCallback(Error::UnprocessableUser, message);
                 }
                 break;
 
                 default: {
                     qCDebug(chatterinoTwitch)
-                        << "Unhandled error adding VIP:" << result.status()
-                        << result.getData() << obj;
+                        << "Unhandled error processing VIP command:"
+                        << result.status() << result.getData() << obj;
+                    failureCallback(Error::Unknown, message);
+                }
+                break;
+            }
+        })
+        .execute();
+}
+
+void Helix::unvipUser(
+    QString userId, QString broadcasterId, ResultCallback<> successCallback,
+    FailureCallback<HelixVipUserError, QString> failureCallback)
+{
+    using Error = HelixVipUserError;
+
+    QUrlQuery query;
+
+    query.addQueryItem("broadcaster_id", broadcasterId);
+    query.addQueryItem("user_id", userId);
+
+    this->makeRequest("channels/vips", query)
+        .type(NetworkRequestType::Delete)
+        .onSuccess([successCallback, failureCallback](auto result) -> Outcome {
+            auto obj = result.parseJson();
+            if (result.status() != 204)
+            {
+                qCWarning(chatterinoTwitch)
+                    << "Success result for removing VIP user was"
+                    << result.status() << "but we only expected it to be 204";
+            }
+
+            successCallback();
+            return Success;
+        })
+        .onError([failureCallback](auto result) {
+            auto obj = result.parseJson();
+            auto message = obj.value("message").toString();
+
+            switch (result.status())
+            {
+                case 401: {
+                    if (message.startsWith("Missing scope",
+                                           Qt::CaseInsensitive))
+                    {
+                        // Handle this error specifically because its API error is especially unfriendly
+                        failureCallback(Error::UserMissingScope, message);
+                    }
+                    else
+                    {
+                        failureCallback(Error::Forwarded, message);
+                    }
+                }
+                break;
+
+                case 409: {
+                    failureCallback(Error::NoSlotsAvailable, message);
+                }
+                break;
+
+                case 422: {
+                    failureCallback(Error::UnprocessableUser, message);
+                }
+                break;
+
+                default: {
+                    qCDebug(chatterinoTwitch)
+                        << "Unhandled error processing VIP command:"
+                        << result.status() << result.getData() << obj;
                     failureCallback(Error::Unknown, message);
                 }
                 break;

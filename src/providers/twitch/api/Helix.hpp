@@ -333,11 +333,8 @@ enum class HelixVipUserError {
     Unknown,
     UserMissingScope,
 
-    // User is a moderator or already VIP
-    UnprocessableEntity,
-
-    // No available VIP slots.
-    // Read more here: https://help.twitch.tv/s/article/Managing-Roles-for-your-Channel?language=en_US#types
+    // User is a moderator or already VIP. (Or not a VIP when trying to remove)
+    UnprocessableUser,
     NoSlotsAvailable,
 
     // The error message is forwarded directly from the Twitch API
@@ -478,6 +475,11 @@ public:
         QString userId, QString broadcasterId, ResultCallback<> successCallback,
         FailureCallback<HelixVipUserError, QString> failureCallback) = 0;
 
+    // https://dev.twitch.tv/docs/api/reference#remove-channel-vip
+    virtual void unvipUser(
+        QString userId, QString broadcasterId, ResultCallback<> successCallback,
+        FailureCallback<HelixVipUserError, QString> failureCallback) = 0;
+
     virtual void update(QString clientId, QString oauthToken) = 0;
 };
 
@@ -602,6 +604,11 @@ public:
 
     // https://dev.twitch.tv/docs/api/reference#add-channel-vip
     void vipUser(
+        QString userId, QString broadcasterId, ResultCallback<> successCallback,
+        FailureCallback<HelixVipUserError, QString> failureCallback) final;
+
+    // https://dev.twitch.tv/docs/api/reference#remove-channel-vip
+    void unvipUser(
         QString userId, QString broadcasterId, ResultCallback<> successCallback,
         FailureCallback<HelixVipUserError, QString> failureCallback) final;
 

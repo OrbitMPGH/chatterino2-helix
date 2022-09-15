@@ -1334,7 +1334,7 @@ void CommandController::initialize(Settings &, Paths &paths)
                             }
                             break;
 
-                            case HelixVipUserError::UnprocessableEntity: {
+                            case HelixVipUserError::UnprocessableUser: {
                                 errorMessage +=
                                     "cannot give VIP to a moderator or a user "
                                     "that already has VIP.";
@@ -1356,6 +1356,80 @@ void CommandController::initialize(Settings &, Paths &paths)
                     makeSystemMessage(QString("Can't give VIP to user %1, no "
                                               "user with that name found!")
                                           .arg(target)));
+            });
+        return "";
+    });
+
+    this->registerCommand("/unvip", [](const QStringList &words, auto channel) {
+        auto currentUser = getApp()->accounts->twitch.getCurrent();
+
+        // Avoid Helix calls without Client ID and/or OAuth Token
+        if (currentUser->isAnon())
+        {
+            channel->addMessage(makeSystemMessage(
+                "You must be logged in to use the /unvip command"));
+            return "";
+        }
+
+        QString target = words.value(1);
+        stripUserName(target);
+
+        if (target.isEmpty())
+        {
+            channel->addMessage(
+                makeSystemMessage(QString("Usage: /unvip <user>")));
+            return "";
+        }
+
+        getHelix()->getUserByName(
+            target,
+            [currentUser, channel, target](const HelixUser &targetUser) {
+                getHelix()->unvipUser(
+                    targetUser.id, currentUser->getUserId(),
+                    [channel, targetUser] {
+                        channel->addMessage(makeSystemMessage(
+                            QString("You successfully removed VIP from user %1")
+                                .arg(targetUser.displayName)));
+                    },
+                    [channel, targetUser](auto error, auto message) {
+                        QString errorMessage =
+                            QString("Failed to remove VIP from user %1 - ")
+                                .arg(targetUser.displayName);
+
+                        switch (error)
+                        {
+                            case HelixVipUserError::UserMissingScope: {
+                                errorMessage +=
+                                    "missing required scope. Reauthenticate "
+                                    "with your user and try again.";
+                            }
+                            break;
+
+                            case HelixVipUserError::Forwarded: {
+                                errorMessage += message + ".";
+                            }
+                            break;
+
+                            case HelixVipUserError::UnprocessableUser: {
+                                errorMessage += "user is not a VIP.";
+                            }
+                            break;
+
+                            case HelixVipUserError::Unknown:
+                            default: {
+                                errorMessage += "an unknown error has occured.";
+                            }
+                            break;
+                        }
+
+                        channel->addMessage(makeSystemMessage(errorMessage));
+                    });
+            },
+            [channel, target] {
+                channel->addMessage(makeSystemMessage(
+                    QString("Can't remove VIP from user %1, no "
+                            "user with that name found!")
+                        .arg(target)));
             });
         return "";
     });
