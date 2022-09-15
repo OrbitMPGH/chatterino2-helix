@@ -2,6 +2,7 @@
 
 #include "Application.hpp"
 #include "common/Env.hpp"
+#include "common/QLogging.hpp"
 #include "common/SignalVector.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/Command.hpp"
@@ -1195,6 +1196,87 @@ void CommandController::initialize(Settings &, Paths &paths)
             crossPlatformCopy(words.mid(1).join(" "));
             return "";
         });
+
+    this->registerCommand("/color", [](const QStringList &words, auto channel) {
+        auto user = getApp()->accounts->twitch.getCurrent();
+
+        // Avoid Helix calls without Client ID and/or OAuth Token
+        if (user->isAnon())
+        {
+            channel->addMessage(makeSystemMessage(
+                "You must be logged in to use the /color command"));
+            return "";
+        }
+
+        // Colors retreived from https://dev.twitch.tv/docs/api/reference#update-user-chat-color 2022-09-11
+        const QStringList validColors{
+            "blue",      "blue_violet",  "cadet_blue",   "chocolate",
+            "coral",     "dodger_blue",  "firebrick",    "golden_rod",
+            "green",     "hot_pink",     "orange_red",   "red",
+            "sea_green", "spring_green", "yellow_green",
+        };
+
+        auto colorString = words.value(1);
+
+        if (colorString.isEmpty())
+        {
+            channel->addMessage(makeSystemMessage(
+                QString("Usage: /color <color> - Color must be one of Twitch's "
+                        "supported colors (%1) or a hex code (#000000) if you "
+                        "have Turbo or Prime.")
+                    .arg(validColors.join(", "))));
+            return "";
+        }
+
+        cleanHelixColorName(colorString);
+
+        getHelix()->updateUserChatColor(
+            user->getUserId(), colorString,
+            [colorString, channel] {
+                QString successMessage =
+                    QString("Your color has been changed to %1.")
+                        .arg(colorString);
+                channel->addMessage(makeSystemMessage(successMessage));
+            },
+            [colorString, channel, validColors](auto error, auto message) {
+                QString errorMessage =
+                    QString("Failed to change color to %1 - ").arg(colorString);
+
+                switch (error)
+                {
+                    case HelixUpdateUserChatColorError::UserMissingScope: {
+                        errorMessage +=
+                            "missing required scope. Reauthenticate with your "
+                            "user and try again.";
+                    }
+                    break;
+
+                    case HelixUpdateUserChatColorError::InvalidColor: {
+                        errorMessage += QString("color must be one of Twitch's "
+                                                "supported colors (%1) or a "
+                                                "hex code (#000000) if you "
+                                                "have Turbo or Prime.")
+                                            .arg(validColors.join(", "));
+                    }
+                    break;
+
+                    case HelixUpdateUserChatColorError::Forwarded: {
+                        errorMessage += message + ".";
+                    }
+                    break;
+
+                    case HelixUpdateUserChatColorError::Unknown:
+                    default: {
+                        errorMessage += "an unknown error has occurred.";
+                    }
+                    break;
+                }
+
+                channel->addMessage(makeSystemMessage(errorMessage));
+            });
+
+        return "";
+    });
 }
 
 void CommandController::save()
