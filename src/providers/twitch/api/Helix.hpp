@@ -329,6 +329,17 @@ enum class HelixUpdateUserChatColorError {
     Forwarded,
 };
 
+enum class HelixDeleteChatMessagesError {
+    Unknown,
+    UserMissingScope,
+    UserNotAuthenticated,
+    UserNotAuthorized,
+    MessageUnavailable,
+
+    // The error message is forwarded directly from the Twitch API
+    Forwarded,
+};
+
 enum class HelixVipUserError {
     Unknown,
     UserMissingScope,
@@ -336,10 +347,6 @@ enum class HelixVipUserError {
     // User is a moderator or already VIP. (Or not a VIP when trying to remove)
     UnprocessableUser,
     NoSlotsAvailable,
-
-    // The error message is forwarded directly from the Twitch API
-    Forwarded,
-};
 
 class IHelix
 {
@@ -468,6 +475,13 @@ public:
     virtual void updateUserChatColor(
         QString userID, QString color, ResultCallback<> successCallback,
         FailureCallback<HelixUpdateUserChatColorError, QString>
+            failureCallback) = 0;
+
+    // https://dev.twitch.tv/docs/api/reference#delete-chat-messages
+    virtual void deleteChatMessages(
+        QString broadcasterID, QString moderatorID, QString messageID,
+        ResultCallback<> successCallback,
+        FailureCallback<HelixDeleteChatMessagesError, QString>
             failureCallback) = 0;
 
     // https://dev.twitch.tv/docs/api/reference#add-channel-vip
@@ -600,6 +614,13 @@ public:
     void updateUserChatColor(
         QString userID, QString color, ResultCallback<> successCallback,
         FailureCallback<HelixUpdateUserChatColorError, QString> failureCallback)
+        final;
+
+    // https://dev.twitch.tv/docs/api/reference#delete-chat-messages
+    void deleteChatMessages(
+        QString broadcasterID, QString moderatorID, QString messageID,
+        ResultCallback<> successCallback,
+        FailureCallback<HelixDeleteChatMessagesError, QString> failureCallback)
         final;
 
     // https://dev.twitch.tv/docs/api/reference#add-channel-vip

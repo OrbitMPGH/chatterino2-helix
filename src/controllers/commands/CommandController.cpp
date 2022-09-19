@@ -1208,14 +1208,6 @@ void CommandController::initialize(Settings &, Paths &paths)
             return "";
         }
 
-        // Colors retreived from https://dev.twitch.tv/docs/api/reference#update-user-chat-color 2022-09-11
-        const QStringList validColors{
-            "blue",      "blue_violet",  "cadet_blue",   "chocolate",
-            "coral",     "dodger_blue",  "firebrick",    "golden_rod",
-            "green",     "hot_pink",     "orange_red",   "red",
-            "sea_green", "spring_green", "yellow_green",
-        };
-
         auto colorString = words.value(1);
 
         if (colorString.isEmpty())
@@ -1224,7 +1216,7 @@ void CommandController::initialize(Settings &, Paths &paths)
                 QString("Usage: /color <color> - Color must be one of Twitch's "
                         "supported colors (%1) or a hex code (#000000) if you "
                         "have Turbo or Prime.")
-                    .arg(validColors.join(", "))));
+                    .arg(VALID_HELIX_COLORS.join(", "))));
             return "";
         }
 
@@ -1238,7 +1230,7 @@ void CommandController::initialize(Settings &, Paths &paths)
                         .arg(colorString);
                 channel->addMessage(makeSystemMessage(successMessage));
             },
-            [colorString, channel, validColors](auto error, auto message) {
+            [colorString, channel](auto error, auto message) {
                 QString errorMessage =
                     QString("Failed to change color to %1 - ").arg(colorString);
 
@@ -1246,17 +1238,17 @@ void CommandController::initialize(Settings &, Paths &paths)
                 {
                     case HelixUpdateUserChatColorError::UserMissingScope: {
                         errorMessage +=
-                            "missing required scope. Reauthenticate with your "
-                            "user and try again.";
+                            "Missing required scope. Re-login with your "
+                            "account and try again.";
                     }
                     break;
 
                     case HelixUpdateUserChatColorError::InvalidColor: {
-                        errorMessage += QString("color must be one of Twitch's "
+                        errorMessage += QString("Color must be one of Twitch's "
                                                 "supported colors (%1) or a "
                                                 "hex code (#000000) if you "
                                                 "have Turbo or Prime.")
-                                            .arg(validColors.join(", "));
+                                            .arg(VALID_HELIX_COLORS.join(", "));
                     }
                     break;
 
@@ -1267,7 +1259,7 @@ void CommandController::initialize(Settings &, Paths &paths)
 
                     case HelixUpdateUserChatColorError::Unknown:
                     default: {
-                        errorMessage += "an unknown error has occurred.";
+                        errorMessage += "An unknown error has occurred.";
                     }
                     break;
                 }
@@ -1277,6 +1269,92 @@ void CommandController::initialize(Settings &, Paths &paths)
 
         return "";
     });
+
+    auto deleteMessages = [](auto channel, const QString &messageID) {
+        const auto *commandName = messageID.isEmpty() ? "/clear" : "/delete";
+        auto *twitchChannel = dynamic_cast<TwitchChannel *>(channel.get());
+        if (twitchChannel == nullptr)
+        {
+            channel->addMessage(makeSystemMessage(
+                QString("The %1 command only works in Twitch channels")
+                    .arg(commandName)));
+            return "";
+        }
+
+        auto user = getApp()->accounts->twitch.getCurrent();
+
+        // Avoid Helix calls without Client ID and/or OAuth Token
+        if (user->isAnon())
+        {
+            channel->addMessage(makeSystemMessage(
+                QString("You must be logged in to use the %1 command.")
+                    .arg(commandName)));
+            return "";
+        }
+
+        getHelix()->deleteChatMessages(
+            twitchChannel->roomId(), user->getUserId(), messageID,
+            []() {
+                // Success handling, we do nothing: IRC/pubsub-edge will dispatch the correct
+                // events to update state for us.
+            },
+            [channel, messageID](auto error, auto message) {
+                QString errorMessage =
+                    QString("Failed to delete chat messages - ");
+
+                switch (error)
+                {
+                    case HelixDeleteChatMessagesError::UserMissingScope: {
+                        errorMessage +=
+                            "Missing required scope. Re-login with your "
+                            "account and try again.";
+                    }
+                    break;
+
+                    case HelixDeleteChatMessagesError::UserNotAuthorized: {
+                        errorMessage +=
+                            "you don't have permission to perform that action.";
+                    }
+                    break;
+
+                    case HelixDeleteChatMessagesError::MessageUnavailable: {
+                        // Override default message prefix to match with IRC message format
+                        errorMessage =
+                            QString(
+                                "The message %1 does not exist, was deleted, "
+                                "or is too old to be deleted.")
+                                .arg(messageID);
+                    }
+                    break;
+
+                    case HelixDeleteChatMessagesError::UserNotAuthenticated: {
+                        errorMessage += "you need to re-authenticate.";
+                    }
+                    break;
+
+                    case HelixDeleteChatMessagesError::Forwarded: {
+                        errorMessage += message + ".";
+                    }
+                    break;
+
+                    case HelixDeleteChatMessagesError::Unknown:
+                    default: {
+                        errorMessage += "An unknown error has occurred.";
+                    }
+                    break;
+                }
+
+                channel->addMessage(makeSystemMessage(errorMessage));
+            });
+
+        return "";
+    };
+
+    this->registerCommand(
+        "/clear", [deleteMessages](const QStringList &words, auto channel) {
+            (void)words;  // unused
+            return deleteMessages(channel, QString());
+        });
 
     this->registerCommand("/vip", [](const QStringList &words, auto channel) {
         auto currentUser = getApp()->accounts->twitch.getCurrent();
